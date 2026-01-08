@@ -6,6 +6,8 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "vm.h"
+#include "pstat.h"
+
 
 uint64
 sys_exit(void)
@@ -107,3 +109,41 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+extern struct proc proc[NPROC];
+
+uint64
+sys_getpinfo(void)
+{
+  uint64 uaddr;
+  argaddr(0, &uaddr);
+  if(uaddr == 0)
+    return -1;
+
+  struct pstat ps;
+  memset(&ps, 0, sizeof(ps));
+
+  struct proc *p;
+  int i = 0;
+
+  for (p = proc; p < &proc[NPROC] && i < NPROC; p++, i++) {
+    if (p->state == UNUSED) {
+      ps.inuse[i] = 0;
+      continue;
+    }
+
+    ps.inuse[i] = 1;
+    ps.pid[i] = p->pid;
+    ps.ppid[i] = p->parent ? p->parent->pid : 0;
+    ps.priority[i] = 0; // προσωρινά μέχρι MLFQ
+    ps.state[i] = p->state;
+    ps.sz[i] = p->sz;
+    safestrcpy(ps.name[i], p->name, 16);
+  }
+
+  if (copyout(myproc()->pagetable, uaddr, (char*)&ps, sizeof(ps)) < 0)
+    return -1;
+
+  return 0;
+}
+
+
